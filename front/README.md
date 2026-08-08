@@ -1,42 +1,61 @@
-# sv
+# SketchDate frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit/Tailwind frontend for the SketchDate v0.0.1 proof of concept. The app keeps the
+entire session in memory and follows the flow in the repository's `PLAN.md`:
 
-## Creating a project
+`landing → media-ready → matching → avatar-date → decision → video-date | ended`
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Local development
 
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
+Copy the example environment file and point it at the Axum backend when needed:
 
 ```sh
-# recreate this project
-npx sv@0.17.0 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:none" --install npm front
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+cp .env.example .env
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+The local default is `ws://localhost:3000/ws`, so the environment variable can be omitted
+when the backend uses its default port.
 
-To create a production version of your app:
+## Character and media pipeline
+
+- MediaPipe Face Landmarker runs locally and turns camera landmarks/blendshapes into the
+  transport-neutral `RigPose` shape.
+- `CharacterRenderer.svelte` builds an SVG asset only when the selected character changes.
+- `ThorVGRenderer.svelte` loads that asset through `@thorvg/webcanvas` and updates named rig
+  paints for each motion frame without reparsing the character.
+- WebRTC sends microphone audio, a reliable character-selection channel, and an unordered
+  20 Hz motion channel.
+- The camera track is never attached to WebRTC until the backend sends `reveal.granted`.
+
+## Validation
 
 ```sh
+npm run check
+npm run lint
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+## GitHub Pages deployment
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Push the repository to `OSSCA-thorvg/Hackathon-SketchDate`. The workflow at
+`.github/workflows/deploy-pages.yml` checks, builds, and deploys this frontend to:
+
+`https://ossca-thorvg.github.io/Hackathon-SketchDate/`
+
+In the GitHub repository, open **Settings → Pages** and set **Source** to
+**GitHub Actions**. For matchmaking to work in production, also add an Actions repository
+variable named `PUBLIC_BACKEND_WS_URL` under **Settings → Secrets and variables → Actions**.
+Its value must be the backend's public secure WebSocket URL, for example:
+
+`wss://api.example.com/ws`
+
+The URL is compiled into the browser bundle and is therefore public; use a repository
+variable rather than a secret. If the variable is omitted, the site still builds and renders,
+but matchmaking falls back to `wss://ossca-thorvg.github.io:3000/ws` and will not connect
+unless a compatible backend is actually available there.
+
+Production builds use `/Hackathon-SketchDate` as their default base path. Override it with
+the `BASE_PATH` environment variable when building for another Pages repository or a custom
+domain (use an empty value for the domain root).
