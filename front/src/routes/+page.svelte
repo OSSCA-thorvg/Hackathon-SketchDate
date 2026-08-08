@@ -68,6 +68,8 @@
 	let pendingSignals: ServerEnvelope[] = [];
 	let pendingCandidates: RTCIceCandidateInit[] = [];
 	let intentionalSocketClose = false;
+	let revealGranted = false;
+	let videoRevealEnabled = false;
 
 	let countdown = $derived(
 		Math.max(0, Math.ceil(((appState === 'decision' ? decisionEndsAt : roundEndsAt) - now) / 1000))
@@ -209,8 +211,11 @@
 
 		try {
 			const nextSocket = new WebSocket(BACKEND_WS_URL);
+			let messageQueue = Promise.resolve();
 			socket = nextSocket;
-			nextSocket.onmessage = (event) => void handleServerMessage(event.data);
+			nextSocket.onmessage = (event) => {
+				messageQueue = messageQueue.then(() => handleServerMessage(String(event.data)));
+			};
 			nextSocket.onclose = () => {
 				if (!intentionalSocketClose && appState !== 'ended') {
 					fail('The secure connection closed. Please start again.');
@@ -289,6 +294,7 @@
 				case 'reveal.granted':
 					appState = 'video-date';
 					videoReady = false;
+					revealGranted = true;
 					await enableVideoReveal();
 					break;
 				case 'session.ended':
@@ -309,7 +315,12 @@
 		const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: 'relay' });
 		peerConnection = pc;
 		remoteVideoStream = new MediaStream();
-		videoTransceiver = pc.addTransceiver('video', { direction: 'recvonly' });
+		// Only the offerer creates the empty video slot. The answerer must adopt the
+		// transceiver created from the remote offer; its own addTransceiver-created slot
+		// would remain unassociated and could never send without another negotiation.
+		if (isInitiator) {
+			videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+		}
 
 		for (const track of mediaStream?.getAudioTracks() ?? []) {
 			pc.addTrack(track, mediaStream!);
@@ -377,12 +388,38 @@
 
 		if (message.type === 'signal.offer') {
 			await pc.setRemoteDescription(message.payload as unknown as RTCSessionDescriptionInit);
+			if (!videoTransceiver) {
+				const offeredVideoTransceiver = pc
+					.getTransceivers()
+					.find(
+						(transceiver) => transceiver.mid !== null && transceiver.receiver.track.kind === 'video'
+					);
+				if (!offeredVideoTransceiver) {
+					throw new Error('The private video channel could not be negotiated.');
+				}
+				offeredVideoTransceiver.direction = 'sendrecv';
+				videoTransceiver = offeredVideoTransceiver;
+			}
 			await flushCandidates();
 			await pc.setLocalDescription(await pc.createAnswer());
+			assertVideoChannelNegotiated();
 			sendServer('signal.answer', pc.localDescription?.toJSON());
+			await enableVideoReveal();
 		} else if (message.type === 'signal.answer') {
 			await pc.setRemoteDescription(message.payload as unknown as RTCSessionDescriptionInit);
 			await flushCandidates();
+			assertVideoChannelNegotiated();
+			await enableVideoReveal();
+		}
+	}
+
+	function assertVideoChannelNegotiated(): void {
+		if (
+			!videoTransceiver ||
+			videoTransceiver.mid === null ||
+			videoTransceiver.currentDirection !== 'sendrecv'
+		) {
+			throw new Error('The private video channel could not be negotiated in both directions.');
 		}
 	}
 
@@ -401,14 +438,22 @@
 	}
 
 	async function enableVideoReveal(): Promise<void> {
+		if (!revealGranted || videoRevealEnabled) return;
+		if (
+			!peerConnection ||
+			!videoTransceiver ||
+			videoTransceiver.mid === null ||
+			videoTransceiver.currentDirection !== 'sendrecv'
+		) {
+			return;
+		}
 		const cameraTrack = mediaStream?.getVideoTracks()[0];
-		if (!peerConnection || !videoTransceiver || !cameraTrack) {
+		if (!cameraTrack || cameraTrack.readyState !== 'live') {
 			fail('The camera is no longer available for video reveal.');
 			return;
 		}
 		await videoTransceiver.sender.replaceTrack(cameraTrack);
-		videoTransceiver.direction = 'sendrecv';
-		if (isInitiator) await sendOffer();
+		videoRevealEnabled = true;
 	}
 
 	function submitDecision(nextChoice: 'reveal' | 'end'): void {
@@ -483,6 +528,8 @@
 		pendingSignals = [];
 		pendingCandidates = [];
 		remoteVideoStream = null;
+		revealGranted = false;
+		videoRevealEnabled = false;
 		if (remoteAudio) remoteAudio.srcObject = null;
 	}
 

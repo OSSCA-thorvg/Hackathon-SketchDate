@@ -27,7 +27,9 @@ when the backend uses its default port.
   paints for each motion frame without reparsing the character.
 - WebRTC sends microphone audio, a reliable character-selection channel, and an unordered
   20 Hz motion channel.
-- The camera track is never attached to WebRTC until the backend sends `reveal.granted`.
+- The WebRTC initiator offers an empty video sending slot, and the answerer adopts that offered
+  transceiver as `sendrecv`. The camera track is never attached until the backend sends
+  `reveal.granted`, so reveal starts video without a second offer/answer exchange.
 
 ## Validation
 
