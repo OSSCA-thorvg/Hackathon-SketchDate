@@ -20,11 +20,7 @@
 	const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
 	const MODEL_URL =
 		'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-	const BACKEND_WS_URL =
-		import.meta.env.PUBLIC_BACKEND_WS_URL ||
-		(typeof window === 'undefined'
-			? 'ws://localhost:3000/ws'
-			: `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:3000/ws`);
+	const BACKEND_WS_URL = 'wss://dlrutfjsooho5.cloudfront.net/ws';
 
 	let appState = $state<AppState>('landing');
 	let selectedParts = $state<PartSelection>({ ...DEFAULT_PARTS });
