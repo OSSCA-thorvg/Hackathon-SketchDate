@@ -5,10 +5,12 @@ Single-process Axum signaling server for the v0.0.1 proof of concept.
 ## Run locally
 
 ```sh
-TURN_KEY_ID=your-cloudflare-turn-key-id \
-TURN_KEY_API_TOKEN=your-cloudflare-turn-key-token \
+cp .env.toml.example .env.toml
 cargo run
 ```
+
+Edit `.env.toml` before starting the server. The backend reads this file from its current
+working directory; it no longer reads runtime configuration from environment variables.
 
 The server listens on `0.0.0.0:3000` by default and exposes:
 
@@ -17,10 +19,10 @@ The server listens on `0.0.0.0:3000` by default and exposes:
 
 ## Configuration
 
-| Variable | Default | Purpose |
+| TOML key | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
-| `ALLOWED_ORIGINS` | local Svelte dev/preview origins | Comma-separated browser origins allowed to open `/ws` |
+| `ALLOWED_ORIGINS` | local Svelte dev/preview origins | Array of browser origins allowed to open `/ws` |
 | `AVATAR_ROUND_SECONDS` | `180` | Avatar date duration |
 | `DECISION_SECONDS` | `20` | Private decision duration |
 | `TURN_KEY_ID` | none | Cloudflare Realtime TURN key ID |
